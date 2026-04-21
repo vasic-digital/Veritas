@@ -8,11 +8,11 @@ import (
 
 func TestVerifyRequestValidateValid(t *testing.T) {
 	opts := VerifyRequest{
-		ReferenceSources: "test",
-		Claim: "test",
-		Context: "test",
-		CheckType: "test",
-		SourceModel: "gpt-4",
+		ReferenceSources: []string{"test"},
+		Claim:            "test",
+		Context:          "test",
+		CheckType:        "test",
+		SourceModel:      "gpt-4",
 	}
 	assert.NoError(t, opts.Validate())
 }
@@ -25,10 +25,10 @@ func TestVerifyRequestValidateEmpty(t *testing.T) {
 
 func TestVerifyResultValidateValid(t *testing.T) {
 	opts := VerifyResult{
-		Claim: "test",
-		Verdict: "test",
-		Confidence: 0.95,
-		SuggestedCorrections: "test",
+		Claim:                "test",
+		Verdict:              "test",
+		Confidence:           0.95,
+		SuggestedCorrections: []string{"test"},
 	}
 	assert.NoError(t, opts.Validate())
 }
@@ -40,21 +40,21 @@ func TestVerifyResultValidateEmpty(t *testing.T) {
 }
 
 func TestVerifyResultValidateConfidenceRange(t *testing.T) {
-	opts := VerifyResult{ID: "test", Confidence: 1.5}
+	opts := VerifyResult{Claim: "test", Confidence: 1.5}
 	assert.Error(t, opts.Validate())
 	opts.Confidence = -0.1
 	assert.Error(t, opts.Validate())
 }
 
 func TestHallucinationResultValidateConfidenceRange(t *testing.T) {
-	opts := HallucinationResult{ID: "test", Confidence: 1.5}
+	opts := HallucinationResult{Confidence: 1.5}
 	assert.Error(t, opts.Validate())
 	opts.Confidence = -0.1
 	assert.Error(t, opts.Validate())
 }
 
 func TestFactCheckValidateConfidenceRange(t *testing.T) {
-	opts := FactCheck{ID: "test", Confidence: 1.5}
+	opts := FactCheck{Confidence: 1.5}
 	assert.Error(t, opts.Validate())
 	opts.Confidence = -0.1
 	assert.Error(t, opts.Validate())
