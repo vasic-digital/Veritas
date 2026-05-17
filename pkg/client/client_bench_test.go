@@ -7,12 +7,19 @@ import (
 	"digital.vasic.veritas/pkg/types"
 )
 
+// BenchmarkVerifyClaim measures the cost of the substring test
+// verifier (CONST-050(A) permits stubs in *_test.go only — the
+// production default returns ErrBaselineVerifierNotConfigured per
+// round-27 §11.4 audit). The benchmark therefore wires
+// substringTestVerifier explicitly to keep the measurement
+// meaningful.
 func BenchmarkVerifyClaim(b *testing.B) {
 	c, err := New()
 	if err != nil {
 		b.Fatal(err)
 	}
 	defer c.Close()
+	c.SetVerifier(substringTestVerifier)
 	ctx := context.Background()
 	req := types.VerifyRequest{
 		Claim:            "water boils at 100",

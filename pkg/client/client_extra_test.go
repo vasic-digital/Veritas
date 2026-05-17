@@ -10,10 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// All tests in this file exercise behaviours that depend on the
+// substring-based Verifier behaviour. Round-27 §11.4 audit (2026-05-17)
+// removed that behaviour from the package-level default — it now lives
+// only in substringTestVerifier (client_test.go), installed via
+// newTestClient. Every test below therefore uses newTestClient.
+
 // TestConsistencyIdenticalResponses — identical answers score 1.0.
 func TestConsistencyIdenticalResponses(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 
 	res, err := c.CheckConsistency(context.Background(),
@@ -25,8 +30,7 @@ func TestConsistencyIdenticalResponses(t *testing.T) {
 
 // TestConsistencyDivergentResponses — mixed answers should have <1.0 score and divergent tokens.
 func TestConsistencyDivergentResponses(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 
 	res, err := c.CheckConsistency(context.Background(),
@@ -38,8 +42,7 @@ func TestConsistencyDivergentResponses(t *testing.T) {
 
 // TestConsistencySinglePassthrough — 1 response short-circuits to 1.0.
 func TestConsistencySinglePassthrough(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 
 	res, err := c.CheckConsistency(context.Background(), []string{"only"}, nil)
@@ -49,8 +52,7 @@ func TestConsistencySinglePassthrough(t *testing.T) {
 
 // TestBatchVerifyEmpty — empty claim list returns empty, no error.
 func TestBatchVerifyEmpty(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	out, err := c.BatchVerify(context.Background(), nil)
 	require.NoError(t, err)
@@ -59,18 +61,16 @@ func TestBatchVerifyEmpty(t *testing.T) {
 
 // TestBatchVerifyPropagatesError — one bad claim aborts the batch.
 func TestBatchVerifyPropagatesError(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	// empty claim fails Validate.
-	_, err = c.BatchVerify(context.Background(), []string{"valid", ""})
+	_, err := c.BatchVerify(context.Background(), []string{"valid", ""})
 	assert.Error(t, err)
 }
 
 // TestDetectHallucinationAsciiBenign — plain ASCII without triggers returns clean.
 func TestDetectHallucinationAsciiBenign(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	res, err := c.DetectHallucination(context.Background(), "a short clean response", "m")
 	require.NoError(t, err)
@@ -80,8 +80,7 @@ func TestDetectHallucinationAsciiBenign(t *testing.T) {
 
 // TestDetectHallucinationTrigger — trigger phrase flagged.
 func TestDetectHallucinationTrigger(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	res, err := c.DetectHallucination(context.Background(),
 		"as I mentioned earlier, according to the latest study, this is so", "m")
@@ -93,8 +92,7 @@ func TestDetectHallucinationTrigger(t *testing.T) {
 
 // TestVerifyClaimContradicted — a source asserting the negation flips verdict.
 func TestVerifyClaimContradicted(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	r, err := c.VerifyClaim(context.Background(), types.VerifyRequest{
 		Claim:            "the ball is red",
@@ -107,8 +105,7 @@ func TestVerifyClaimContradicted(t *testing.T) {
 
 // TestVerifyClaimSupportedBySource — source containing the claim supports.
 func TestVerifyClaimSupportedBySource(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	r, err := c.VerifyClaim(context.Background(), types.VerifyRequest{
 		Claim:            "water boils at 100 celsius",
@@ -133,8 +130,7 @@ func TestVerifyClaimInjectedVerifierError(t *testing.T) {
 
 // TestAddSourceAndGetFactSources — registered sources indexed by substring match.
 func TestAddSourceAndGetFactSources(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	c.AddSource("doc1", "The Eiffel Tower is in Paris.")
 	c.AddSource("doc2", "London has Big Ben.")
@@ -146,8 +142,7 @@ func TestAddSourceAndGetFactSources(t *testing.T) {
 
 // TestAddSourceEmptyIgnored.
 func TestAddSourceEmptyIgnored(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
 	c.AddSource("", "x")
 	evs, err := c.GetFactSources(context.Background(), "x")
@@ -157,18 +152,16 @@ func TestAddSourceEmptyIgnored(t *testing.T) {
 
 // TestCompareModelsEmptyClaim.
 func TestCompareModelsEmptyClaim(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
-	_, err = c.CompareModels(context.Background(), "", []string{"m1"})
+	_, err := c.CompareModels(context.Background(), "", []string{"m1"})
 	assert.Error(t, err)
 }
 
 // TestVerifyClaimInvalidRequest.
 func TestVerifyClaimInvalidRequest(t *testing.T) {
-	c, err := New()
-	require.NoError(t, err)
+	c := newTestClient(t)
 	defer c.Close()
-	_, err = c.VerifyClaim(context.Background(), types.VerifyRequest{Claim: ""})
+	_, err := c.VerifyClaim(context.Background(), types.VerifyRequest{Claim: ""})
 	assert.Error(t, err)
 }

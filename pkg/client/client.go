@@ -1,9 +1,22 @@
 // Package client provides the Go client for the Veritas library.
 //
 // Veritas performs AI-truthfulness verification, simple fact-checking,
-// hallucination detection, and response-consistency analysis. A
-// substring-and-keyword baseline pipeline ships so the client is
-// immediately usable; callers can inject richer verifiers.
+// hallucination detection, and response-consistency analysis.
+//
+// IMPORTANT — round-27 §11.4 audit (2026-05-17): the substring-and-
+// keyword "baseline pipeline" that previously shipped as the default
+// Verifier on New() / NewFromConfig() was a PASS-bluff at the
+// library-default layer. It fabricated supported/contradicted/unknown
+// verdicts with hardcoded confidence scores (0.2 / 0.7+0.05× / 0.95)
+// derived purely from substring matches against the supplied sources,
+// while presenting itself as a real fact-verification engine. Callers
+// who forgot to inject a real LLM-backed Verifier via SetVerifier
+// received fabricated confidence numbers and trusted them.
+//
+// The bluff has been removed. baselineVerifier now returns
+// ErrBaselineVerifierNotConfigured. Callers MUST inject a real
+// Verifier via SetVerifier before invoking VerifyClaim /
+// BatchVerify / CompareModels.
 //
 // Basic usage:
 //
@@ -12,6 +25,11 @@
 //	c, err := veritas.New()
 //	if err != nil { log.Fatal(err) }
 //	defer c.Close()
+//
+//	// REQUIRED — wire a real Verifier (LLM-backed or rule-based)
+//	// before invoking VerifyClaim. Without this, VerifyClaim
+//	// surfaces ErrBaselineVerifierNotConfigured.
+//	c.SetVerifier(myRealLLMVerifier)
 package client
 
 import (
@@ -26,6 +44,25 @@ import (
 
 	. "digital.vasic.veritas/pkg/types"
 )
+
+// ErrBaselineVerifierNotConfigured is returned by VerifyClaim (and the
+// helpers that compose on it — BatchVerify, CompareModels) when no
+// Verifier has been injected via SetVerifier. Prior to round-27 §11.4
+// audit (2026-05-17), the package's default Verifier was a substring-
+// matching "baseline" that emitted fabricated verdicts with hardcoded
+// confidence scores while pretending to be a real verification
+// pipeline. That bluff has been replaced with this sentinel so
+// callers cannot mistake the absence of a real Verifier for working
+// verification.
+//
+// Tests that need deterministic verdicts for assertion purposes
+// install a unit-test helper via SetVerifier — see
+// substringTestVerifier in client_test.go (CONST-050(A) permits
+// stubs in *_test.go only).
+//
+// Constitutional anchors: CONST-035 (anti-bluff), CONST-050(A)
+// (no-fakes-beyond-unit-tests), Article XI §11.9 (forensic anchor).
+var ErrBaselineVerifierNotConfigured = fmt.Errorf("veritas: baseline Verifier has not been replaced — call client.SetVerifier(...) with a real LLM-backed verifier before invoking Verify (the previous baseline default produced fabricated keyword-match verdicts with hardcoded confidence scores; §11.4 PASS-bluff removed)")
 
 // Verifier evaluates a claim against reference sources.
 type Verifier func(ctx context.Context, claim string, sources []string) (VerifyResult, error)
@@ -316,74 +353,23 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// baselineVerifier is a substring-match verdict: supported / contradicted / unknown.
-func baselineVerifier(_ context.Context, claim string, sources []string) (VerifyResult, error) {
-	lower := strings.ToLower(strings.TrimSpace(claim))
-	verdict := "unknown"
-	confidence := 0.2
-	evidence := []Evidence{}
-	contradictions := []Contradiction{}
-	supported := 0
-	contradicted := 0
-	// negation detection: claim contains "not" vs source missing "not" (crude)
-	for i, s := range sources {
-		lowerS := strings.ToLower(s)
-		if strings.Contains(lowerS, lower) {
-			supported++
-			evidence = append(evidence, Evidence{
-				Source:    fmt.Sprintf("source-%d", i),
-				Excerpt:   truncate(s, 120),
-				Relevance: 0.9,
-			})
-		} else if negatedMatch(lower, lowerS) {
-			contradicted++
-			contradictions = append(contradictions, Contradiction{
-				StatementA: claim,
-				StatementB: truncate(s, 120),
-				Severity:   0.7,
-			})
-		}
-	}
-	switch {
-	case supported > contradicted && supported > 0:
-		verdict = "supported"
-		confidence = 0.7 + float64(supported)*0.05
-		if confidence > 0.95 {
-			confidence = 0.95
-		}
-	case contradicted > supported && contradicted > 0:
-		verdict = "contradicted"
-		confidence = 0.7 + float64(contradicted)*0.05
-		if confidence > 0.95 {
-			confidence = 0.95
-		}
-	case len(sources) == 0:
-		verdict = "unknown"
-		confidence = 0.1
-	}
-	return VerifyResult{
-		Claim:          claim,
-		Verdict:        verdict,
-		Confidence:     confidence,
-		Evidence:       evidence,
-		Contradictions: contradictions,
-	}, nil
-}
-
-// negatedMatch returns true when s is the claim with a "not" inserted or removed.
-func negatedMatch(claim, source string) bool {
-	if strings.Contains(claim, " not ") {
-		stripped := strings.Replace(claim, " not ", " ", 1)
-		return strings.Contains(source, stripped)
-	}
-	// source asserts the negation of claim
-	for _, prefix := range []string{"is ", "are ", "was ", "were "} {
-		if idx := strings.Index(claim, prefix); idx >= 0 {
-			neg := claim[:idx+len(prefix)] + "not " + claim[idx+len(prefix):]
-			if strings.Contains(source, neg) {
-				return true
-			}
-		}
-	}
-	return false
+// baselineVerifier previously implemented a substring + crude-negation
+// "verdict" with hardcoded confidence scores (0.2 / 0.7+0.05× / 0.95).
+// Per round-27 §11.4 audit (2026-05-17), any caller that forgot to
+// call SetVerifier before invoking VerifyClaim received fabricated
+// confidence numbers with no error surfaced — CRITICAL PASS-bluff at
+// the library-default layer.
+//
+// Fix: baselineVerifier now returns ErrBaselineVerifierNotConfigured.
+// New() / NewFromConfig() still seed this function as the default so
+// client construction stays cheap, but the first call to VerifyClaim
+// (or BatchVerify / CompareModels which compose on it) without an
+// injected real Verifier surfaces the sentinel error explaining what
+// to do (call SetVerifier).
+//
+// The previous substring-matching logic has been preserved in
+// substringTestVerifier inside client_test.go where CONST-050(A)
+// permits stub Verifiers; tests install it via SetVerifier.
+func baselineVerifier(_ context.Context, _ string, _ []string) (VerifyResult, error) {
+	return VerifyResult{}, ErrBaselineVerifierNotConfigured
 }
