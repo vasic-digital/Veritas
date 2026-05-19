@@ -1,0 +1,34 @@
+# challenges/fixtures/locales.yaml
+#
+# Round-288 5-locale UX evidence fixtures for digital.vasic.veritas.
+# Mirrors the strings emitted by challenges/runner/main.go so that
+# operator-facing localisation regressions surface as fixture drift
+# during code review, not as silent UX bluffs in production.
+#
+# Strings are summary-line templates; %d substitutions are filled at
+# runtime with (operation_count, verification_count). The runner is
+# the source of truth — this file is a reviewer-visible mirror per
+# CONST-046.
+
+schema_version: 1
+date_added: 2026-05-19
+notes: |
+  Defensive use only. These strings DESCRIBE the verification
+  lifecycle to human operators. They contain no payload-generation
+  language and no operational evasion guidance.
+locales:
+  - tag: en
+    template: "[en] veritas: %d operations exercised, %d verifications run via real client (defensive-use only)"
+    note: "English baseline — matches the canonical token 'veritas:' grepped by the Challenge."
+  - tag: sr
+    template: "[sr] veritas: %d operacija izvršeno, %d verifikacija pokrenuto preko realnog klijenta (samo za odbranu)"
+    note: "Serbian Latin — Cyrillic transliteration permitted as long as canonical token preserved."
+  - tag: ja
+    template: "[ja] veritas: %d 件の操作を実行、%d 件の検証を実クライアントで実施(防御用途のみ)"
+    note: "Japanese — full-width comma + parens, defensive-use clause preserved."
+  - tag: es
+    template: "[es] veritas: %d operaciones ejecutadas, %d verificaciones realizadas con cliente real (uso defensivo)"
+    note: "Spanish — past participle 'ejecutadas/realizadas' (operaciones/verificaciones are feminine plural)."
+  - tag: de
+    template: "[de] veritas: %d Operationen ausgeführt, %d Verifikationen mit echtem Client durchgeführt (nur Verteidigung)"
+    note: "German — compound noun 'Verifikationen'; defensive clause shortened to 'nur Verteidigung'."
